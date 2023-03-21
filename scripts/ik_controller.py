@@ -2,7 +2,7 @@
 
 import rospy
 import math 
-from robp_msgs.msg import CommandDuration
+from hiwonder_servo_msgs.msg import CommandDuration
 from hiwonder_servo_msgs.msg import JointState
 from std_msgs.msg import Float64
 
@@ -10,7 +10,11 @@ from std_msgs.msg import Float64
 class RoboticArm:
 
     def __init__(self):
-       
+
+        # Define some flags ( we will subscribe to these flags)
+        self.START_MISSION = True
+        self.PICK = True
+        self.LEAVE = False
        
         # Define the lengths of the three links of the robotic arm
         self.length1 = 101.0
@@ -54,6 +58,7 @@ class RoboticArm:
         self.state3_subs = rospy.Subscriber('/joint3_controller/state',JointState, self.state3_callback)
         self.state4_subs = rospy.Subscriber('/joint4_controller/state',JointState, self.state4_callback)
     
+    
     def state1_callback(self,msg):
         self.joint1_state = msg.current_pos
 
@@ -68,8 +73,7 @@ class RoboticArm:
         
      
     
-    def calculate_commands(self, y , z):
-        self.busy = True
+    def calculate_commands(self, x, y , z):
  
         # Set different orientations of the gripper according to the distance to the object.
         if y>=300.0:
@@ -82,10 +86,17 @@ class RoboticArm:
             self.orientation = -1.5708
         elif y<160:
             exit()
+        
+        # Align the arm with the target point and  correct the coordinates
+        yaw = math.asin(x/y)
+        y = math.sqrt(x**2 + y**2)
+        x = 0
 
         # Calculate the different commands    
         P_y = y - self.length3 * math.cos(self.orientation)
         P_z = z - self.length3 * math.sin(self.orientation)
+
+        self.joint1_angle = yaw
         
         self.joint3_angle = - math.acos(((P_z**2 + P_y**2) - (self.length1**2 + self.length2**2))/(2*self.length1*self.length2))
         
@@ -94,13 +105,14 @@ class RoboticArm:
         self.joint4_angle = self.orientation - (self.joint2_angle + self.joint3_angle)
 
         self.joint2_angle -= math.pi/2
-
-        rospy.sleep(0.5)
-
+        
+        self.command1_duration = abs(self.joint1_angle - self.joint2_state) * self.time_factor
         self.command2_duration = abs(self.joint2_angle - self.joint2_state) * self.time_factor
         self.command3_duration = abs(self.joint3_angle - self.joint3_state) * self.time_factor 
         self.command4_duration = abs(self.joint4_angle - self.joint4_state) * self.time_factor 
 
+        print("new_x:",x,"new_y:",y)
+        print("command:",self.joint1_angle,"state:",self.joint1_state)
         print("command:",self.joint2_angle,"state:",self.joint2_state)
         print("command:",self.joint3_angle,"state:",self.joint3_state)
         print("command:",self.joint4_angle,"state:",self.joint4_state)
@@ -108,6 +120,12 @@ class RoboticArm:
     
     
     def publish_commands(self):
+
+        command1 = CommandDuration()
+        command1.data = self.joint4_angle
+        command1.duration = self.command4_duration
+        self.joint1_command_pub.publish(command1)
+        rospy.sleep(self.command1_duration/1000)
         
                        
         command4 = CommandDuration()
@@ -127,14 +145,21 @@ class RoboticArm:
         command2.data = self.joint2_angle
         command2.duration = self.command2_duration
         self.joint2_command_pub.publish(command2)
-
         rospy.sleep(self.command2_duration/1000)
           
-        rospy.sleep(1)
-        gripper_command = Float64()
-        gripper_command.data = -0.2
-        self.gripper_pub.publish(gripper_command)
-        rospy.sleep(1)
+        if  self.PICK == True and self.LEAVE == False:
+            rospy.sleep(0.5)
+            gripper_command = Float64()
+            gripper_command.data = -0.2
+            self.gripper_pub.publish(gripper_command)
+            rospy.sleep(1)
+        elif self.PICK == True and self.LEAVE == False:
+            rospy.sleep(0.5)
+            gripper_command = Float64()
+            gripper_command.data = -1.3
+            self.gripper_pub.publish(gripper_command)
+            rospy.sleep(1)
+
     
     def return_to_origin (self):
         self.joint1_angle = -1.570
@@ -172,65 +197,20 @@ class RoboticArm:
         self.joint1_command_pub.publish(command1)
         rospy.sleep(self.command1_duration/1000)
 
-        gripper_command = Float64()
-        gripper_command.data = -1.3
-        self.gripper_pub.publish(gripper_command)
-        rospy.sleep(1)
-
-        self.joint1_angle = 0.0
-        self.joint2_angle = 0.5
-        self.joint3_angle = -1.35
-        self.joint4_angle = -1.76
-
-        self.command1_duration = abs(self.joint1_angle - -1.570) * self.time_factor
-        self.command2_duration = abs(self.joint2_angle - self.joint2_state) * self.time_factor
-        self.command3_duration = abs(self.joint3_angle - self.joint3_state) * self.time_factor 
-        self.command4_duration = abs(self.joint4_angle - self.joint4_state) * self.time_factor
         
-        command1 = CommandDuration()
-        command1.data = self.joint1_angle
-        command1.duration = self.command1_duration
-        self.joint1_command_pub.publish(command1)
-        rospy.sleep(self.command1_duration/1000)
-
-        command2 = CommandDuration()
-        command2.data = self.joint2_angle
-        command2.duration = self.command2_duration
-        self.joint2_command_pub.publish(command2)
-        rospy.sleep(self.command2_duration/1000)
-        
-        command3 = CommandDuration()
-        command3.data = self.joint3_angle
-        command3.duration = self.command3_duration
-        self.joint3_command_pub.publish(command3)
-        rospy.sleep(self.command3_duration/1000)
-        
-        
-        command4 = CommandDuration()
-        command4.data = self.joint4_angle
-        command4.duration = self.command4_duration
-        self.joint4_command_pub.publish(command4)
-        rospy.sleep(self.command4_duration/1000)
-   
-
-
-
-
-        
- 
-    
-
 
 if __name__ == '__main__':
-
-    y = 300.0
+    
+    x = 100.0
+    y = 200.0
     z = -135.0
+
 
     rospy.init_node('ik_controller') 
 
     controller = RoboticArm()
 
-    controller.calculate_commands(y, z)
+    controller.calculate_commands(x, y, z)
 
     controller.publish_commands()
 
