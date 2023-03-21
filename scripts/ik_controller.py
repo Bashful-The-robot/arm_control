@@ -74,7 +74,12 @@ class RoboticArm:
      
     
     def calculate_commands(self, x, y , z):
- 
+        
+        # Align the arm with the target point and  correct the coordinates
+        yaw = math.asin(x/y)
+        y = math.sqrt(x**2 + y**2)
+        x = 0
+
         # Set different orientations of the gripper according to the distance to the object.
         if y>=300.0:
             self.orientation = -0.785
@@ -86,11 +91,6 @@ class RoboticArm:
             self.orientation = -1.5708
         elif y<160:
             exit()
-        
-        # Align the arm with the target point and  correct the coordinates
-        yaw = math.asin(x/y)
-        y = math.sqrt(x**2 + y**2)
-        x = 0
 
         # Calculate the different commands    
         P_y = y - self.length3 * math.cos(self.orientation)
@@ -106,26 +106,28 @@ class RoboticArm:
 
         self.joint2_angle -= math.pi/2
         
-        self.command1_duration = abs(self.joint1_angle - self.joint2_state) * self.time_factor
+        self.command1_duration = abs(self.joint1_angle - self.joint1_state) * self.time_factor
         self.command2_duration = abs(self.joint2_angle - self.joint2_state) * self.time_factor
         self.command3_duration = abs(self.joint3_angle - self.joint3_state) * self.time_factor 
         self.command4_duration = abs(self.joint4_angle - self.joint4_state) * self.time_factor 
 
         print("new_x:",x,"new_y:",y)
-        print("command:",self.joint1_angle,"state:",self.joint1_state)
-        print("command:",self.joint2_angle,"state:",self.joint2_state)
-        print("command:",self.joint3_angle,"state:",self.joint3_state)
-        print("command:",self.joint4_angle,"state:",self.joint4_state)
+        print("command 1:",self.joint1_angle,"state:",self.command1_duration)
+        print("command 2:",self.joint2_angle,"state:",self.command2_duration)
+        print("command 3:",self.joint3_angle,"state:",self.command3_duration)
+        print("command 4:",self.joint4_angle,"state:",self.command4_duration)
     
     
     
     def publish_commands(self):
 
+        rospy.sleep(1)
         command1 = CommandDuration()
-        command1.data = self.joint4_angle
-        command1.duration = self.command4_duration
+        command1.data = self.joint1_angle
+        command1.duration = self.command1_duration
         self.joint1_command_pub.publish(command1)
         rospy.sleep(self.command1_duration/1000)
+        
         
                        
         command4 = CommandDuration()
@@ -162,16 +164,17 @@ class RoboticArm:
 
     
     def return_to_origin (self):
-        self.joint1_angle = -1.570
-        self.joint2_angle = 0.0
+        
+        self.joint1_angle = 0.0
+        self.joint2_angle = 0.5
         self.joint3_angle = -1.35
-        self.joint4_angle = -0.78
+        self.joint4_angle = -1.76
 
-        self.command1_duration = abs(self.joint1_angle - 0.0) * self.time_factor
+        self.command1_duration = abs(self.joint1_angle - self.joint1_state) * self.time_factor
         self.command2_duration = abs(self.joint2_angle - self.joint2_state) * self.time_factor
         self.command3_duration = abs(self.joint3_angle - self.joint3_state) * self.time_factor 
         self.command4_duration = abs(self.joint4_angle - self.joint4_state) * self.time_factor
-        
+
         command2 = CommandDuration()
         command2.data = self.joint2_angle
         command2.duration = self.command2_duration
@@ -190,7 +193,7 @@ class RoboticArm:
         command4.duration = self.command4_duration
         self.joint4_command_pub.publish(command4)
         rospy.sleep(self.command4_duration/1000)
-        
+
         command1 = CommandDuration()
         command1.data = self.joint1_angle
         command1.duration = self.command1_duration
@@ -202,7 +205,7 @@ class RoboticArm:
 if __name__ == '__main__':
     
     x = 100.0
-    y = 200.0
+    y = 250.0
     z = -135.0
 
 
